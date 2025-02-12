@@ -12,20 +12,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
-import javax.annotation.PostConstruct;
-import javax.servlet.http.HttpServletResponse;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-
 @Controller
 @Slf4j
 @RequestMapping("/cv")
 public class ApiController {
     @Autowired
-    public ApiController(final RedissonClient redisson) {
-        final RRemoteService rs1 = redisson.getRemoteService(_service_cosyvoice);
-        cosyVoiceService = rs1.get(CosyVoiceService.class,
-                RemoteInvocationOptions.defaults().noAck().expectResultWithin(300 * 1000L));
+    public ApiController(@Value("${service.cosyvoice}") final String service_cosyvoice,
+                         final RedissonClient redisson) {
+        cosyVoiceService = redisson.getRemoteService(service_cosyvoice)
+                .get(CosyVoiceService.class, RemoteInvocationOptions.defaults()/*.noAck()*/
+                        .expectResultWithin(300 * 1000L));
     }
 
     @Data
@@ -35,24 +31,22 @@ public class ApiController {
         private String prompt_text;
         private String prompt_wav;
         private String bucket;
-        private String saveTo;
+        private String save_to;
     }
 
     @RequestMapping(value = "/zero_shot", method = RequestMethod.POST)
+    @ResponseBody
     public String zero_shot(@RequestBody final ZeroShotRequest request) {
         log.info("zero_shot: ttsText:{} / promptText:{} / promptWav:{}", request.tts_text, request.prompt_text, request.prompt_wav);
 
         String result = null;
         try {
-            result = cosyVoiceService.inferenceZeroShotAndSave(request.tts_text, request.prompt_text, request.prompt_wav, request.bucket, request.saveTo);
+            result = cosyVoiceService.inferenceZeroShotAndSave(request.tts_text, request.prompt_text, request.prompt_wav, request.bucket, request.save_to);
             return result;
         } finally {
             log.info("zero_shot: complete with: {}", result);
         }
     }
-
-    @Value("${service.cosyvoice}")
-    private String _service_cosyvoice;
 
     private final CosyVoiceService cosyVoiceService;
 }

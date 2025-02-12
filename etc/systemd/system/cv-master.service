@@ -7,7 +7,7 @@ After=network.target network-online.target local-fs.target
 [Service]
 ; service
 Type=simple
-PIDFile=/home/cv-master/pids/cv-agent.pid
+PIDFile=/home/cv-master/pids/cv-master.pid
 ; PermissionsStartOnly has been deprecated in favor of the ExecStart= and similar series, see:
 ; https://github.com/NixOS/nixpkgs/issues/53852
 ; PermissionsStartOnly=true
