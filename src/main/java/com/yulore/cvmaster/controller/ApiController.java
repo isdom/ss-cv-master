@@ -1,10 +1,12 @@
 package com.yulore.cvmaster.controller;
 
 import com.yulore.api.CosyVoiceService;
+import com.yulore.cvmaster.service.CVTaskService;
+import com.yulore.cvmaster.vo.CommitZeroShotTasksRequest;
+import com.yulore.cvmaster.vo.CommitZeroShotTasksResponse;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RRemoteService;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.RemoteInvocationOptions;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,5 +50,22 @@ public class ApiController {
         }
     }
 
+    @RequestMapping(value = "/commit_zero_shot_tasks", method = RequestMethod.POST)
+    @ResponseBody
+    public CommitZeroShotTasksResponse commitZeroShotTasks(@RequestBody final CommitZeroShotTasksRequest request) {
+        log.info("commit_zero_shot_tasks: task count:{}", request.tasks.length);
+
+        CommitZeroShotTasksResponse resp = null;
+        try {
+            resp = taskService.CommitZeroShotTasks(request);
+            return resp;
+        } finally {
+            log.info("commit_zero_shot_tasks: complete with: {}", resp);
+        }
+    }
+
     private final CosyVoiceService cosyVoiceService;
+
+    @Autowired
+    private CVTaskService taskService;
 }
