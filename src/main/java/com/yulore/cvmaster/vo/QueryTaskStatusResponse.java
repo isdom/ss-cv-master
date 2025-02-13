@@ -4,6 +4,5 @@ import lombok.Builder;
 
 @Builder
 public class QueryTaskStatusResponse {
-    public String task_id;
-    public int status;
+    public TaskStatus[] statuses;
 }

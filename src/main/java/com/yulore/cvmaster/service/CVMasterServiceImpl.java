@@ -1,7 +1,6 @@
 package com.yulore.cvmaster.service;
 
 import com.yulore.api.CVMasterService;
-import com.yulore.api.CosyVoiceService;
 import com.yulore.cvmaster.vo.*;
 import com.yulore.util.ExceptionUtil;
 import io.netty.util.concurrent.DefaultThreadFactory;
@@ -17,6 +16,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PreDestroy;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.*;
 
 @Slf4j
@@ -56,16 +58,30 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public QueryTaskStatusResponse queryTaskStatus(final String taskId) {
-        final ZeroShotMemo memo = zeroShotMemos.get(taskId);
-        if (null == memo) {
-            // not found
-            return  QueryTaskStatusResponse.builder().task_id(taskId).status(-1).build();
-        } else {
-            return  QueryTaskStatusResponse.builder().task_id(taskId)
-                    .status(memo.status != 2 ? 1 : 2)
-                    .build();
+    public TaskStatus[] queryTaskStatus(final String[] ids) {
+        final List<TaskStatus> statues = new ArrayList<>();
+        for (String taskId : ids) {
+            final ZeroShotMemo memo = zeroShotMemos.get(taskId);
+            if (null == memo) {
+                // not found
+                final ZeroShotTask task = completedTasks.get(taskId);
+                if (null != task) {
+                    statues.add(TaskStatus.builder()
+                            .task_id(taskId)
+                            .status("done")
+                            .build());
+                }
+                statues.add(TaskStatus.builder()
+                        .task_id(taskId)
+                        .status("not_found")
+                        .build());
+            } else {
+                statues.add(TaskStatus.builder().task_id(taskId)
+                        .status("pending")
+                        .build());
+            }
         }
+        return statues.toArray(new TaskStatus[0]);
     }
 
     @PreDestroy
@@ -90,16 +106,20 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                     memo.task.prompt_wav,
                                     memo.task.bucket,
                                     memo.task.save_to
-                            );
+                                    );
                             future.whenComplete((resp, ex) -> {
                                 if (resp != null) {
+                                    zeroShotMemos.remove(memo.task.task_id);
+                                    completedTasks.put(memo.task.task_id, memo.task);
                                     log.info("task: {} complete with: {}", memo.task.task_id, resp);
-                                    memo.status = 2;
-                                    memo.resp = resp;
+                                    // memo.status = 2;
+                                    // memo.resp = resp;
                                 }
                                 if (ex != null) {
-                                    log.info("task: {} failed with: {}", memo.task.task_id, ExceptionUtil.exception2detail(ex));
-                                    memo.status = 3;
+                                    log.info("task: {} failed with: {}, schedule to retry",
+                                            memo.task.task_id, ExceptionUtil.exception2detail(ex));
+                                    // set status => 0, to re-try
+                                    memo.status = 0;
                                 }
                             });
                             log.info("async execute zero shot task: {} ok", memo.task);
@@ -151,5 +171,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
 
     private final ConcurrentMap<String, AgentMemo> agentMemos = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ZeroShotMemo> zeroShotMemos = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1, new DefaultThreadFactory("cvTaskExecutor"));
+    private final ConcurrentMap<String, ZeroShotTask> completedTasks = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler =
+            Executors.newScheduledThreadPool(1, new DefaultThreadFactory("cvTaskExecutor"));
 }
