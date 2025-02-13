@@ -2,9 +2,7 @@ package com.yulore.cvmaster.service;
 
 import com.yulore.api.CVMasterService;
 import com.yulore.api.CosyVoiceService;
-import com.yulore.cvmaster.vo.CommitZeroShotTasksRequest;
-import com.yulore.cvmaster.vo.CommitZeroShotTasksResponse;
-import com.yulore.cvmaster.vo.ZeroShotTask;
+import com.yulore.cvmaster.vo.*;
 import com.yulore.util.ExceptionUtil;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import lombok.Builder;
@@ -42,14 +40,32 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public CommitZeroShotTasksResponse CommitZeroShotTasks(final CommitZeroShotTasksRequest request) {
+    public CommitZeroShotTasksResponse commitZeroShotTasks(final CommitZeroShotTasksRequest request) {
         for (ZeroShotTask task : request.tasks) {
             if ( null != zeroShotMemos.putIfAbsent(task.task_id,
                     ZeroShotMemo.builder().task(task).status(0).build()) ) {
-                log.warn("CommitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
+                log.warn("commitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
             }
         }
         return CommitZeroShotTasksResponse.builder().free_workers(0).build();
+    }
+
+    @Override
+    public QueryWorkerStatusResponse queryWorkerStatus() {
+        return QueryWorkerStatusResponse.builder().total_workers(agentMemos.size()).free_workers(totalFreeWorks()).build();
+    }
+
+    @Override
+    public QueryTaskStatusResponse queryTaskStatus(final String taskId) {
+        final ZeroShotMemo memo = zeroShotMemos.get(taskId);
+        if (null == memo) {
+            // not found
+            return  QueryTaskStatusResponse.builder().task_id(taskId).status(-1).build();
+        } else {
+            return  QueryTaskStatusResponse.builder().task_id(taskId)
+                    .status(memo.status != 2 ? 1 : 2)
+                    .build();
+        }
     }
 
     @PreDestroy
@@ -61,13 +77,13 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
 
     private void checkAndExecuteTasks() {
         try {
-            if (!zeroShotMemos.isEmpty()) {
-                log.info("begin to execute zero shot tasks");
+            final int pendingTasks = pendingTasks();
+            if (pendingTasks > 0) {
                 if (totalFreeWorks() > 0) {
                     for (final ZeroShotMemo memo : zeroShotMemos.values()) {
                         if (0 == memo.status) {
+                            memo.status = 1; // executing
                             log.info("execute zero shot task: {}", memo.task);
-                            final String taskId = memo.task.task_id;
                             final RFuture<String> future = cosyVoiceService.inferenceZeroShotAndSave(
                                     memo.task.tts_text,
                                     memo.task.prompt_text,
@@ -77,12 +93,12 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                             );
                             future.whenComplete((resp, ex) -> {
                                 if (resp != null) {
-                                    log.info("task: {} complete with: {}", taskId, resp);
-                                    memo.status = 1;
+                                    log.info("task: {} complete with: {}", memo.task.task_id, resp);
+                                    memo.status = 2;
                                     memo.resp = resp;
                                 }
                                 if (ex != null) {
-                                    log.info("task: {} failed with: {}", taskId, ExceptionUtil.exception2detail(ex));
+                                    log.info("task: {} failed with: {}", memo.task.task_id, ExceptionUtil.exception2detail(ex));
                                     memo.status = 3;
                                 }
                             });
@@ -90,6 +106,8 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                             break;
                         }
                     }
+                } else {
+                    log.debug("no more free workers for pending tasks: {}", pendingTasks);
                 }
             }
         } finally {
@@ -103,6 +121,14 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
             freeWorks += memo.freeWorks;
         }
         return freeWorks;
+    }
+
+    private int pendingTasks() {
+        int pendingTasks = 0;
+        for (ZeroShotMemo memo : zeroShotMemos.values()) {
+            pendingTasks += memo.status == 0 ? 1 : 0;
+        }
+        return pendingTasks;
     }
 
     private final CosyVoiceServiceAsync cosyVoiceService;
