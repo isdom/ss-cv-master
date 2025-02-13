@@ -24,6 +24,8 @@ import java.util.concurrent.*;
 @Slf4j
 @Service
 public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
+    private static final long AGENT_UPDATE_TIMEOUT_IN_MS = 1000 * 30; // 30s
+
     @Autowired
     public CVMasterServiceImpl(@Value("${service.cosyvoice}") final String serviceName,
                                final RedissonClient redisson) {
@@ -92,6 +94,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     private void checkAndExecuteTasks() {
+        updateAgents();
         try {
             final int pendingTasks = pendingTasks();
             if (pendingTasks > 0) {
@@ -132,6 +135,17 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
             }
         } finally {
             scheduler.schedule(this::checkAndExecuteTasks, _task_check_interval, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void updateAgents() {
+        final long now = System.currentTimeMillis();
+        for (AgentMemo memo : agentMemos.values()) {
+            if (now - memo.updateTimestamp >= AGENT_UPDATE_TIMEOUT_IN_MS) {
+                if (agentMemos.remove(memo.id) != null) {
+                    log.warn("updateAgents: remove_update_timeout agent: {}", memo);
+                }
+            }
         }
     }
 
