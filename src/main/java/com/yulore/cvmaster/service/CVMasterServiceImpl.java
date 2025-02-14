@@ -70,11 +70,12 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                             .task_id(taskId)
                             .status("done")
                             .build());
+                } else {
+                    statues.add(TaskStatus.builder()
+                            .task_id(taskId)
+                            .status("not_found")
+                            .build());
                 }
-                statues.add(TaskStatus.builder()
-                        .task_id(taskId)
-                        .status("not_found")
-                        .build());
             } else {
                 statues.add(TaskStatus.builder().task_id(taskId)
                         .status("pending")
