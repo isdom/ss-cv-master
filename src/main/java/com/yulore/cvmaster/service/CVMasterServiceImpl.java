@@ -43,23 +43,22 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public CommitZeroShotTasksResponse commitZeroShotTasks(final CommitZeroShotTasksRequest request) {
+    public void commitZeroShotTasks(final CommitZeroShotTasksRequest request) {
         for (ZeroShotTask task : request.tasks) {
             if ( null != zeroShotMemos.putIfAbsent(task.task_id,
                     ZeroShotMemo.builder().task(task).status(0).build()) ) {
                 log.warn("commitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
             }
         }
-        return CommitZeroShotTasksResponse.builder().free_workers(0).build();
     }
 
     @Override
-    public QueryWorkerStatusResponse queryWorkerStatus() {
-        return QueryWorkerStatusResponse.builder().total_workers(agentMemos.size()).free_workers(totalFreeWorks()).build();
+    public WorkerStatus queryWorkerStatus() {
+        return WorkerStatus.builder().total_workers(agentMemos.size()).free_workers(totalFreeWorks()).build();
     }
 
     @Override
-    public TaskStatus[] queryTaskStatus(final String[] ids) {
+    public TaskStatusResult queryTaskStatus(final String[] ids) {
         final List<TaskStatus> statues = new ArrayList<>();
         for (String taskId : ids) {
             final ZeroShotMemo memo = zeroShotMemos.get(taskId);
@@ -82,7 +81,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                         .build());
             }
         }
-        return statues.toArray(new TaskStatus[0]);
+        return TaskStatusResult.builder().statuses(statues.toArray(new TaskStatus[0])).build();
     }
 
     @PreDestroy
