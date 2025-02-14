@@ -46,18 +46,50 @@ public class ApiController {
         return resp;
     }
 
+    @RequestMapping(value = "/agent/all", method = RequestMethod.GET)
+    @ResponseBody
+    public ApiResponse<AgentMemo[]> queryAllAgentStatus() {
+        ApiResponse<AgentMemo[]> resp = null;
+        try {
+            final AgentMemo[] memos = taskService.queryAllAgentStatus();
+            resp = ApiResponse.<AgentMemo[]>builder().code("0000").data(memos).build();
+        } catch (final Exception ex) {
+            log.warn("/agent/all failed: {}", ExceptionUtil.exception2detail(ex));
+            resp = ApiResponse.<AgentMemo[]>builder().code("2000").message(ExceptionUtil.exception2detail(ex)).build();
+        } finally {
+            log.info("/agent/all: complete with resp: {}", resp);
+        }
+        return resp;
+    }
+
     @RequestMapping(value = "/task/status", method = RequestMethod.POST)
     @ResponseBody
-    public ApiResponse<TaskStatusResult> queryTaskStatus(@RequestBody final QueryTaskStatusRequest request) {
-        ApiResponse<TaskStatusResult> resp = null;
+    public ApiResponse<TaskStatus[]> queryTaskStatus(@RequestBody final QueryTaskStatusRequest request) {
+        ApiResponse<TaskStatus[]> resp = null;
         try {
-            final TaskStatusResult result = taskService.queryTaskStatus(request.task_ids);
-            resp = ApiResponse.<TaskStatusResult>builder().code("0000").data(result).build();
+            final TaskStatus[] result = taskService.queryTaskStatus(request.task_ids);
+            resp = ApiResponse.<TaskStatus[]>builder().code("0000").data(result).build();
         } catch (final Exception ex) {
             log.warn("/task/status failed: {}", ExceptionUtil.exception2detail(ex));
-            resp = ApiResponse.<TaskStatusResult>builder().code("2000").message(ExceptionUtil.exception2detail(ex)).build();
+            resp = ApiResponse.<TaskStatus[]>builder().code("2000").message(ExceptionUtil.exception2detail(ex)).build();
         } finally {
             log.info("/task/status: complete with resp: {}", resp);
+        }
+        return resp;
+    }
+
+    @RequestMapping(value = "/task/all", method = RequestMethod.GET)
+    @ResponseBody
+    public ApiResponse<TaskStatus[]> queryAllTaskStatus() {
+        ApiResponse<TaskStatus[]> resp = null;
+        try {
+            final TaskStatus[] result = taskService.queryAllTaskStatus();
+            resp = ApiResponse.<TaskStatus[]>builder().code("0000").data(result).build();
+        } catch (final Exception ex) {
+            log.warn("/task/all failed: {}", ExceptionUtil.exception2detail(ex));
+            resp = ApiResponse.<TaskStatus[]>builder().code("2000").message(ExceptionUtil.exception2detail(ex)).build();
+        } finally {
+            log.info("/task/all: complete with resp: {}", resp);
         }
         return resp;
     }

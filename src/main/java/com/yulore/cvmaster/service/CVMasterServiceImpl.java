@@ -58,7 +58,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public TaskStatusResult queryTaskStatus(final String[] ids) {
+    public TaskStatus[] queryTaskStatus(final String[] ids) {
         final List<TaskStatus> statues = new ArrayList<>();
         for (String taskId : ids) {
             final ZeroShotMemo memo = zeroShotMemos.get(taskId);
@@ -82,7 +82,28 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                         .build());
             }
         }
-        return TaskStatusResult.builder().statuses(statues.toArray(new TaskStatus[0])).build();
+        return statues.toArray(new TaskStatus[0]);
+    }
+
+    @Override
+    public TaskStatus[] queryAllTaskStatus() {
+        final List<TaskStatus> statues = new ArrayList<>();
+        for (ZeroShotMemo memo : zeroShotMemos.values()) {
+            statues.add(TaskStatus.builder().task_id(memo.task.task_id)
+                    .status("pending")
+                    .build());
+        }
+        for (ZeroShotTask task : completedTasks.values()) {
+            statues.add(TaskStatus.builder().task_id(task.task_id)
+                    .status("done")
+                    .build());
+        }
+        return statues.toArray(new TaskStatus[0]);
+    }
+
+    @Override
+    public AgentMemo[] queryAllAgentStatus() {
+        return agentMemos.values().toArray(new AgentMemo[0]);
     }
 
     @PreDestroy
@@ -140,8 +161,8 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     private void updateAgents() {
         final long now = System.currentTimeMillis();
         for (AgentMemo memo : agentMemos.values()) {
-            if (now - memo.updateTimestamp >= AGENT_UPDATE_TIMEOUT_IN_MS) {
-                if (agentMemos.remove(memo.id) != null) {
+            if (now - memo.updateTimestamp() >= AGENT_UPDATE_TIMEOUT_IN_MS) {
+                if (agentMemos.remove(memo.id()) != null) {
                     log.warn("updateAgents: remove_update_timeout agent: {}", memo);
                 }
             }
@@ -151,7 +172,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     private int totalFreeWorks() {
         int freeWorks = 0;
         for (AgentMemo memo : agentMemos.values()) {
-            freeWorks += memo.freeWorks;
+            freeWorks += memo.freeWorks();
         }
         return freeWorks;
     }
@@ -165,9 +186,6 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     private final CosyVoiceServiceAsync cosyVoiceService;
-
-    record AgentMemo(String id, int freeWorks, long updateTimestamp) {
-    }
 
     @Builder
     @Data

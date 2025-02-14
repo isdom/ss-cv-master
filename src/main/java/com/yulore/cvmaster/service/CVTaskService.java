@@ -5,5 +5,7 @@ import com.yulore.cvmaster.vo.*;
 public interface CVTaskService {
     void commitZeroShotTasks(final CommitZeroShotTasksRequest request);
     WorkerStatus queryWorkerStatus();
-    TaskStatusResult queryTaskStatus(final String[] taskId);
+    TaskStatus[] queryTaskStatus(final String[] taskId);
+    TaskStatus[] queryAllTaskStatus();
+    AgentMemo[] queryAllAgentStatus();
 }
