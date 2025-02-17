@@ -139,7 +139,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                     // memo.resp = resp;
                                 }
                                 if (ex != null) {
-                                    log.info("task: {} failed with: {}, schedule to retry",
+                                    log.info("task: {} failed with: {}, schedule_to_retry",
                                             memo.task.task_id, ExceptionUtil.exception2detail(ex));
                                     // set status => 0, to re-try
                                     memo.status = 0;
