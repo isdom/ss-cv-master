@@ -106,6 +106,11 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         return agentMemos.values().toArray(new AgentMemo[0]);
     }
 
+    @Override
+    public TaskSummary queryTaskSummary() {
+        return TaskSummary.builder().pending(zeroShotMemos.size()).done(completedTasks.size()).build();
+    }
+
     @PreDestroy
     public void stop() {
         scheduler.shutdownNow();

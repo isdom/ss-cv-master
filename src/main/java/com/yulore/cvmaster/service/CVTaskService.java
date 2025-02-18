@@ -8,4 +8,5 @@ public interface CVTaskService {
     TaskStatus[] queryTaskStatus(final String[] taskId);
     TaskStatus[] queryAllTaskStatus();
     AgentMemo[] queryAllAgentStatus();
+    TaskSummary queryTaskSummary();
 }

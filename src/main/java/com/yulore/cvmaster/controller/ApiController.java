@@ -94,6 +94,22 @@ public class ApiController {
         return resp;
     }
 
+    @RequestMapping(value = "/task/summary", method = RequestMethod.GET)
+    @ResponseBody
+    public ApiResponse<TaskSummary> queryTaskSummary() {
+        ApiResponse<TaskSummary> resp = null;
+        try {
+            final TaskSummary result = taskService.queryTaskSummary();
+            resp = ApiResponse.<TaskSummary>builder().code("0000").data(result).build();
+        } catch (final Exception ex) {
+            log.warn("/task/summary failed: {}", ExceptionUtil.exception2detail(ex));
+            resp = ApiResponse.<TaskSummary>builder().code("2000").message(ExceptionUtil.exception2detail(ex)).build();
+        } finally {
+            log.info("/task/summary: complete with resp: {}", resp);
+        }
+        return resp;
+    }
+
     @Autowired
     private CVTaskService taskService;
 }
