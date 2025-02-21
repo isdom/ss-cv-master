@@ -127,7 +127,8 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                     for (final ZeroShotMemo memo : zeroShotMemos.values()) {
                         if (0 == memo.status) {
                             memo.status = 1; // executing
-                            log.info("execute zero shot task: {}", memo.task);
+                            log.info("execute_zeroshot_task: {}", memo.task);
+                            final long now = System.currentTimeMillis();
                             final RFuture<String> future = cosyVoiceService.inferenceZeroShotAndSave(
                                     memo.task.tts_text,
                                     memo.task.prompt_text,
@@ -139,23 +140,24 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                 if (resp != null) {
                                     zeroShotMemos.remove(memo.task.task_id);
                                     completedTasks.put(memo.task.task_id, memo.task);
-                                    log.info("task: {} complete with: {}", memo.task.task_id, resp);
+                                    log.info("task: {} complete_with: {}, cost: {} s",
+                                            memo.task.task_id, resp, (System.currentTimeMillis() - now) / 1000.0f);
                                     // memo.status = 2;
                                     // memo.resp = resp;
                                 }
                                 if (ex != null) {
-                                    log.info("task: {} failed with: {}, schedule_to_retry",
+                                    log.info("task: {} failed_with: {}, schedule_to_retry",
                                             memo.task.task_id, ExceptionUtil.exception2detail(ex));
                                     // set status => 0, to re-try
                                     memo.status = 0;
                                 }
                             });
-                            log.info("async execute zero shot task: {} ok", memo.task);
+                            log.info("async_execute_zeroshot_task: {} ok", memo.task);
                             break;
                         }
                     }
                 } else {
-                    log.debug("no more free workers for pending tasks: {}", pendingTasks);
+                    //log.debug("no more free workers for pending tasks: {}", pendingTasks);
                 }
             }
         } finally {
@@ -165,10 +167,13 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
 
     private void updateAgents() {
         final long now = System.currentTimeMillis();
-        for (AgentMemo memo : agentMemos.values()) {
-            if (now - memo.updateTimestamp() >= AGENT_UPDATE_TIMEOUT_IN_MS) {
-                if (agentMemos.remove(memo.id()) != null) {
-                    log.warn("updateAgents: remove_update_timeout agent: {}", memo);
+        if (now - last_agent_check_timestamp > _agent_check_interval) {
+            last_agent_check_timestamp = now;
+            for (AgentMemo memo : agentMemos.values()) {
+                if (now - memo.updateTimestamp() >= AGENT_UPDATE_TIMEOUT_IN_MS) {
+                    if (agentMemos.remove(memo.id()) != null) {
+                        log.warn("updateAgents: remove_update_timeout agent: {}", memo);
+                    }
                 }
             }
         }
@@ -202,8 +207,13 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         private String resp;
     }
 
-    @Value("${task.check_interval:1000}") // default: 1000ms
+    @Value("${task.check_interval:100}") // default: 100ms
     private long _task_check_interval;
+
+    @Value("${agent.check_interval:10000}") // default: 1000ms
+    private long _agent_check_interval;
+
+    private long last_agent_check_timestamp = 0;
 
     private final ConcurrentMap<String, AgentMemo> agentMemos = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ZeroShotMemo> zeroShotMemos = new ConcurrentHashMap<>();
