@@ -12,6 +12,24 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 @RequestMapping("/cv")
 public class ApiController {
+    @RequestMapping(value = "/prepare_session", method = RequestMethod.POST)
+    @ResponseBody
+    public ApiResponse<Void> prepareSession(@RequestBody final PrepareSessionRequest request) {
+        log.info("prepare_session: {}", request);
+
+        ApiResponse<Void> resp = null;
+        try {
+            // taskService.commitZeroShotTasks(request);
+            resp = ApiResponse.<Void>builder().code("0000").build();
+        } catch (final Exception ex) {
+            log.warn("prepare_session failed: {}", ExceptionUtil.exception2detail(ex));
+            resp = ApiResponse.<Void>builder().code("2000").message(ExceptionUtil.exception2detail(ex)).build();
+        } finally {
+            log.info("prepare_session: complete with resp: {}", resp);
+        }
+        return resp;
+    }
+
     @RequestMapping(value = "/commit_zero_shot_tasks", method = RequestMethod.POST)
     @ResponseBody
     public ApiResponse<Void> commitZeroShotTasks(@RequestBody final CommitZeroShotTasksRequest request) {
