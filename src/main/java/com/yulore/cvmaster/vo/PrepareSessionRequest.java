@@ -9,8 +9,8 @@ import java.util.Map;
 @Data
 public class PrepareSessionRequest {
     private String sessionId;
-    private Map<String, String> ttsTextList;  //占位符
-    private String promptText; //参考音
-    private String promptWav; //参考音
-    private String promptBucket;
+    private int botId;
+    private Map<String, String> ttsTextList;  //待合成文本
+    private String promptText; //参考音文本
+    private String promptWav; //参考音: {bucket=bucket_name1}yyyy.wav
 }

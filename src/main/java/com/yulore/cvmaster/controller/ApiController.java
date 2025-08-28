@@ -1,17 +1,35 @@
 package com.yulore.cvmaster.controller;
 
+import com.yulore.cvmaster.service.CVMasterServiceImpl;
 import com.yulore.cvmaster.service.CVTaskService;
 import com.yulore.cvmaster.vo.*;
 import com.yulore.util.ExceptionUtil;
+import com.yulore.api.ScriptApi;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Controller
 @Slf4j
 @RequestMapping("/cv")
 public class ApiController {
+    @Value("${repo.bucket}")
+    private String _repo_bucket;
+
+    @Value("${repo.prefix}")
+    private String _repo_prefix;
+
+    @Autowired
+    private ScriptApi _scriptApi;
+
     @RequestMapping(value = "/prepare_session", method = RequestMethod.POST)
     @ResponseBody
     public ApiResponse<Void> prepareSession(@RequestBody final PrepareSessionRequest request) {
@@ -19,7 +37,43 @@ public class ApiController {
 
         ApiResponse<Void> resp = null;
         try {
-            // taskService.commitZeroShotTasks(request);
+            CompletionStage<Map<String, String>> allTaskResult = CompletableFuture.completedStage(new ConcurrentHashMap<>());
+            if (request.getTtsTextList() != null && !request.getTtsTextList().isEmpty()) {
+                for (Map.Entry<String, String> entry : request.getTtsTextList().entrySet()) {
+                    final var task_id = UUID.randomUUID().toString().replaceAll("-", "");
+                    final var key = entry.getKey();
+                    final var text = entry.getValue();
+                    final var saveTo = _repo_prefix + Integer.toString(request.getBotId()) + "/" + request.getSessionId() + "/" + task_id + ".wav";
+                    final var task = ZeroShotTask.builder()
+                            .task_id(task_id)
+                            .prompt_text(request.getPromptText())
+                            .prompt_wav(request.getPromptWav())
+                            .tts_text(text)
+                            .bucket(_repo_bucket)
+                            .save_to(saveTo)
+                            .build();
+                    allTaskResult = allTaskResult.thenCombine(taskService.commitZeroShotTask(task),
+                            (m, task_) -> {
+                                m.put(key, task_.save_to);
+                                return m;
+                            });
+                }
+            }
+
+            allTaskResult.whenComplete((result, ex) -> {
+                if (result != null) {
+                    final var synthRequest = ScriptApi.SessionSynthRequest.builder()
+                            .sessionId(request.getSessionId())
+                            .state(1)
+                            .bucket(_repo_bucket)
+                            .ttsMd5Map(result)
+                            .build();
+                    _scriptApi.report_synth(synthRequest);
+                } else if (ex != null) {
+                    log.warn("prepareSession: commitZeroShotTask failed: {}", ExceptionUtil.exception2detail(ex));
+                }
+            });
+
             resp = ApiResponse.<Void>builder().code("0000").build();
         } catch (final Exception ex) {
             log.warn("prepare_session failed: {}", ExceptionUtil.exception2detail(ex));
@@ -37,7 +91,14 @@ public class ApiController {
 
         ApiResponse<Void> resp = null;
         try {
-            taskService.commitZeroShotTasks(request);
+            for (ZeroShotTask task : request.tasks) {
+                taskService.commitZeroShotTask(task);
+//                if ( null != zeroShotMemos.putIfAbsent(task.task_id,
+//                        CVMasterServiceImpl.ZeroShotMemo.builder().task(task).status(0).build()) ) {
+//                    log.warn("commitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
+//                }
+            }
+            //taskService.commitZeroShotTasks(request);
             resp = ApiResponse.<Void>builder().code("0000").build();
         } catch (final Exception ex) {
             log.warn("commit_zero_shot_tasks failed: {}", ExceptionUtil.exception2detail(ex));

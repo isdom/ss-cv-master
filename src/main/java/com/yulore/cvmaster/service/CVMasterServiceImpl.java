@@ -43,13 +43,21 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public void commitZeroShotTasks(final CommitZeroShotTasksRequest request) {
-        for (ZeroShotTask task : request.tasks) {
-            if ( null != zeroShotMemos.putIfAbsent(task.task_id,
-                    ZeroShotMemo.builder().task(task).status(0).build()) ) {
+    public CompletionStage<ZeroShotTask> commitZeroShotTask(final ZeroShotTask task) {
+        //for (ZeroShotTask task : request.tasks) {
+        final var completableFuture = new CompletableFuture<ZeroShotTask>();
+        if ( null != zeroShotMemos.putIfAbsent(task.task_id,
+                    ZeroShotMemo.builder()
+                            .task(task)
+                            .status(0)
+                            .completableFuture(completableFuture)
+                            .build()) ) {
                 log.warn("commitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
-            }
+                return CompletableFuture.failedStage(new RuntimeException("task_id:{} has_committed_already"));
+        } else {
+            return completableFuture;
         }
+        //}
     }
 
     @Override
@@ -142,6 +150,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                     completedTasks.put(memo.task.task_id, memo.task);
                                     log.info("task: {} complete_with: {}, cost: {} s",
                                             memo.task.task_id, resp, (System.currentTimeMillis() - now) / 1000.0f);
+                                    memo.completableFuture.complete(memo.task);
                                     // memo.status = 2;
                                     // memo.resp = resp;
                                 }
@@ -202,6 +211,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     @ToString
     static public class ZeroShotMemo {
         private ZeroShotTask task;
+        private CompletableFuture<ZeroShotTask> completableFuture;
         // 0: todo  1: executing 2: complete 3: failed
         private int status;
         private String resp;
