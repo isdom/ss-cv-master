@@ -16,6 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Controller
 @Slf4j
@@ -30,6 +31,8 @@ public class ApiController {
     @Autowired
     private ScriptApi _scriptApi;
 
+    private final ConcurrentMap<String, CompletableFuture<ZeroShotTask>> _key2task = new ConcurrentHashMap<>();
+
     @RequestMapping(value = "/prepare_session", method = RequestMethod.POST)
     @ResponseBody
     public ApiResponse<Void> prepareSession(@RequestBody final PrepareSessionRequest request) {
@@ -40,19 +43,31 @@ public class ApiController {
             CompletionStage<Map<String, String>> allTaskResult = CompletableFuture.completedStage(new ConcurrentHashMap<>());
             if (request.getTtsTextList() != null && !request.getTtsTextList().isEmpty()) {
                 for (Map.Entry<String, String> entry : request.getTtsTextList().entrySet()) {
-                    final var task_id = UUID.randomUUID().toString().replaceAll("-", "");
                     final var key = entry.getKey();
                     final var text = entry.getValue();
-                    final var saveTo = _repo_prefix + Integer.toString(request.getBotId()) + "/" + request.getSessionId() + "/" + task_id + ".wav";
-                    final var task = ZeroShotTask.builder()
-                            .task_id(task_id)
-                            .prompt_text(request.getPromptText())
-                            .prompt_wav(request.getPromptWav())
-                            .tts_text(text)
-                            .bucket(_repo_bucket)
-                            .save_to(saveTo)
-                            .build();
-                    allTaskResult = allTaskResult.thenCombine(taskService.commitZeroShotTask(task),
+                    var myCf = new CompletableFuture<ZeroShotTask>();
+                    final var prevCf = _key2task.putIfAbsent(key, myCf);
+                    if (null == prevCf) {
+                        // need generate
+                        final var saveTo = _repo_prefix + Integer.toString(request.getBotId()) + "/" + key + ".wav";
+
+                        log.info("prepareSession: start to generate wav for {}/{}/{}", request.getBotId(), key, text);
+
+                        final var task = ZeroShotTask.builder()
+                                .task_id(key)
+                                .prompt_text(request.getPromptText())
+                                .prompt_wav(request.getPromptWav())
+                                .tts_text(text)
+                                .bucket(_repo_bucket)
+                                .save_to(saveTo)
+                                .build();
+                        taskService.commitZeroShotTask(task, myCf);
+                    } else {
+                        // generate already
+                        myCf = prevCf;
+                        log.info("prepareSession: use cached_wav for {}/{}/{}", request.getBotId(), key, text);
+                    }
+                    allTaskResult = allTaskResult.thenCombine(myCf,
                             (m, task_) -> {
                                 m.put(key, task_.save_to);
                                 return m;
@@ -92,13 +107,8 @@ public class ApiController {
         ApiResponse<Void> resp = null;
         try {
             for (ZeroShotTask task : request.tasks) {
-                taskService.commitZeroShotTask(task);
-//                if ( null != zeroShotMemos.putIfAbsent(task.task_id,
-//                        CVMasterServiceImpl.ZeroShotMemo.builder().task(task).status(0).build()) ) {
-//                    log.warn("commitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
-//                }
+                taskService.commitZeroShotTask(task, null);
             }
-            //taskService.commitZeroShotTasks(request);
             resp = ApiResponse.<Void>builder().code("0000").build();
         } catch (final Exception ex) {
             log.warn("commit_zero_shot_tasks failed: {}", ExceptionUtil.exception2detail(ex));

@@ -43,21 +43,18 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public CompletionStage<ZeroShotTask> commitZeroShotTask(final ZeroShotTask task) {
-        //for (ZeroShotTask task : request.tasks) {
-        final var completableFuture = new CompletableFuture<ZeroShotTask>();
-        if ( null != zeroShotMemos.putIfAbsent(task.task_id,
+    public void commitZeroShotTask(final ZeroShotTask task, final CompletableFuture<ZeroShotTask> cf) {
+        if (null != zeroShotMemos.putIfAbsent(task.task_id,
                     ZeroShotMemo.builder()
                             .task(task)
                             .status(0)
-                            .completableFuture(completableFuture)
+                            .completableFuture(cf)
                             .build()) ) {
                 log.warn("commitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
-                return CompletableFuture.failedStage(new RuntimeException("task_id:{} has_committed_already"));
-        } else {
-            return completableFuture;
+                if (cf != null) {
+                    cf.completeExceptionally(new RuntimeException("task_id:{} has_committed_already"));
+                }
         }
-        //}
     }
 
     @Override
@@ -150,7 +147,9 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                     completedTasks.put(memo.task.task_id, memo.task);
                                     log.info("task: {} complete_with: {}, cost: {} s",
                                             memo.task.task_id, resp, (System.currentTimeMillis() - now) / 1000.0f);
-                                    memo.completableFuture.complete(memo.task);
+                                    if (memo.completableFuture != null) {
+                                        memo.completableFuture.complete(memo.task);
+                                    }
                                     // memo.status = 2;
                                     // memo.resp = resp;
                                 }
