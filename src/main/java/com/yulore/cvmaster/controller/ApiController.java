@@ -51,7 +51,8 @@ public class ApiController {
                         // need generate
                         final var saveTo = _repo_prefix + Integer.toString(request.getBotId()) + "/" + key + ".wav";
 
-                        log.info("prepareSession: start to generate wav for {}/{}/{}", request.getBotId(), key, text);
+                        log.info("[{}] prepareSession: start to generate wav for botId:{}/key:{}/text:{}",
+                                request.getSessionId(), request.getBotId(), key, text);
 
                         final var task = ZeroShotTask.builder()
                                 .task_id(key)
@@ -65,7 +66,8 @@ public class ApiController {
                     } else {
                         // generate already
                         myCf = prevCf;
-                        log.info("prepareSession: use cached_wav for {}/{}/{}", request.getBotId(), key, text);
+                        log.info("[{}]: prepareSession: use cached_wav for botId:{}/key:{}/text:{}",
+                                request.getSessionId(), request.getBotId(), key, text);
                     }
                     allTaskResult = allTaskResult.thenCombine(myCf,
                             (m, task_) -> {
