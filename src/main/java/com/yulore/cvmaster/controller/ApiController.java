@@ -85,7 +85,13 @@ public class ApiController {
                             .bucket(_repo_bucket)
                             .ttsMd5Map(result)
                             .build();
-                    _scriptApi.report_synth(synthRequest);
+                    try {
+                        _scriptApi.report_synth(synthRequest);
+                        log.info("[{}]: scriptApi.report_synth: request:{}", request.getSessionId(), synthRequest);
+                    } catch (Exception ex1) {
+                        log.warn("[{}]: scriptApi.report_synth: request:{} failed: {}",
+                                request.getSessionId(), synthRequest, ExceptionUtil.exception2detail(ex1));
+                    }
                 } else if (ex != null) {
                     log.warn("prepareSession: commitZeroShotTask failed: {}", ExceptionUtil.exception2detail(ex));
                 }
