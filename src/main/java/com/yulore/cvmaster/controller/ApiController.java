@@ -1,21 +1,17 @@
 package com.yulore.cvmaster.controller;
 
 import com.aliyun.oss.OSS;
-import com.yulore.cvmaster.service.CVMasterServiceImpl;
 import com.yulore.cvmaster.service.CVTaskService;
 import com.yulore.cvmaster.vo.*;
 import com.yulore.util.ExceptionUtil;
 import com.yulore.api.ScriptApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.ByteArrayInputStream;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
