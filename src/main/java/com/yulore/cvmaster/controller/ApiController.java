@@ -1,16 +1,19 @@
 package com.yulore.cvmaster.controller;
 
+import com.aliyun.oss.OSS;
 import com.yulore.cvmaster.service.CVMasterServiceImpl;
 import com.yulore.cvmaster.service.CVTaskService;
 import com.yulore.cvmaster.vo.*;
 import com.yulore.util.ExceptionUtil;
 import com.yulore.api.ScriptApi;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayInputStream;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -18,18 +21,22 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+@RequiredArgsConstructor
 @Controller
 @Slf4j
 @RequestMapping("/cv")
 public class ApiController {
+    private final CVTaskService taskService;
+
     @Value("${repo.bucket}")
     private String _repo_bucket;
 
     @Value("${repo.prefix}")
     private String _repo_prefix;
 
-    @Autowired
-    private ScriptApi _scriptApi;
+    private final ScriptApi _scriptApi;
+
+    private final OSS _ossClient;
 
     private final ConcurrentMap<String, CompletableFuture<ZeroShotTask>> _key2task = new ConcurrentHashMap<>();
 
@@ -49,11 +56,7 @@ public class ApiController {
                     final var prevCf = _key2task.putIfAbsent(key, myCf);
                     if (null == prevCf) {
                         // need generate
-                        final var saveTo = _repo_prefix + Integer.toString(request.getBotId()) + "/" + key + ".wav";
-
-                        log.info("[{}] prepareSession: start to generate wav for botId:{}/key:{}/text:{}",
-                                request.getSessionId(), request.getBotId(), key, text);
-
+                        final var saveTo = _repo_prefix + request.getBotId() + "/" + key + ".wav";
                         final var task = ZeroShotTask.builder()
                                 .task_id(key)
                                 .prompt_text(request.getPromptText())
@@ -62,7 +65,17 @@ public class ApiController {
                                 .bucket(_repo_bucket)
                                 .save_to(saveTo)
                                 .build();
-                        taskService.commitZeroShotTask(task, myCf);
+
+                        if (_ossClient.doesObjectExist(_repo_bucket, saveTo)) {
+                            // saveTo exist already
+                            log.info("[{}] prepareSession: {}'s {} obj_exist_already for botId:{}/key:{}/text:{}",
+                                    request.getSessionId(), _repo_bucket, saveTo, request.getBotId(), key, text);
+                            myCf.complete(task);
+                        } else {
+                            log.info("[{}] prepareSession: start_to_generate_wav for botId:{}/key:{}/text:{}",
+                                    request.getSessionId(), request.getBotId(), key, text);
+                            taskService.commitZeroShotTask(task, myCf);
+                        }
                     } else {
                         // generate already
                         myCf = prevCf;
@@ -206,7 +219,4 @@ public class ApiController {
         }
         return resp;
     }
-
-    @Autowired
-    private CVTaskService taskService;
 }
