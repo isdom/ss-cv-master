@@ -36,6 +36,74 @@ public class ApiController {
 
     private final ConcurrentMap<String, CompletableFuture<ZeroShotTask>> _key2task = new ConcurrentHashMap<>();
 
+    @RequestMapping(value = "/test_prepare", method = RequestMethod.POST)
+    @ResponseBody
+    public ApiResponse<Void> testPrepare(@RequestBody final PrepareSessionRequest request) {
+        log.info("test_prepare: {}", request);
+
+        ApiResponse<Void> resp = null;
+        try {
+            CompletionStage<Map<String, String>> allTaskResult = CompletableFuture.completedStage(new ConcurrentHashMap<>());
+            if (request.getTtsTextList() != null && !request.getTtsTextList().isEmpty()) {
+                for (Map.Entry<String, String> entry : request.getTtsTextList().entrySet()) {
+                    final var key = entry.getKey();
+                    final var text = entry.getValue();
+                    var myCf = new CompletableFuture<ZeroShotTask>();
+                    final var prevCf = _key2task.putIfAbsent(key, myCf);
+                    if (null == prevCf) {
+                        // need generate
+                        final var saveTo = _repo_prefix + request.getBotId() + "/" + key + ".wav";
+                        final var task = ZeroShotTask.builder()
+                                .task_id(key)
+                                .prompt_text(request.getPromptText())
+                                .prompt_wav(request.getPromptWav())
+                                .tts_text(text)
+                                .bucket(_repo_bucket)
+                                .save_to(saveTo)
+                                .build();
+
+                        if (_ossClient.doesObjectExist(_repo_bucket, saveTo)) {
+                            // saveTo exist already
+                            log.info("[{}] testPrepare: {}'s {} obj_exist_already for botId:{}/key:{}/text:{}",
+                                    request.getSessionId(), _repo_bucket, saveTo, request.getBotId(), key, text);
+                            myCf.complete(task);
+                        } else {
+                            log.info("[{}] testPrepare: start_to_generate_wav for botId:{}/key:{}/text:{}",
+                                    request.getSessionId(), request.getBotId(), key, text);
+                            taskService.commitZeroShotTask(task, myCf);
+                        }
+                    } else {
+                        // generate already
+                        myCf = prevCf;
+                        log.info("[{}]: testPrepare: use cached_wav for botId:{}/key:{}/text:{}",
+                                request.getSessionId(), request.getBotId(), key, text);
+                    }
+                    allTaskResult = allTaskResult.thenCombine(myCf,
+                            (m, task_) -> {
+                                m.put(key, task_.save_to);
+                                return m;
+                            });
+                }
+            }
+
+            allTaskResult.whenComplete((result, ex) -> {
+                if (result != null) {
+                    log.info("[{}]: testPrepare: handle_request_complete: {}", request.getSessionId(), request);
+                } else if (ex != null) {
+                    log.warn("[{}]: testPrepare: commitZeroShotTask failed: {}", request.getSessionId(), ExceptionUtil.exception2detail(ex));
+                }
+            });
+
+            resp = ApiResponse.<Void>builder().code("0000").build();
+        } catch (final Exception ex) {
+            log.warn("test_prepare failed: {}", ExceptionUtil.exception2detail(ex));
+            resp = ApiResponse.<Void>builder().code("2000").message(ExceptionUtil.exception2detail(ex)).build();
+        } finally {
+            log.info("test_prepare: complete with resp: {}", resp);
+        }
+        return resp;
+    }
+
     @RequestMapping(value = "/prepare_session", method = RequestMethod.POST)
     @ResponseBody
     public ApiResponse<Void> prepareSession(@RequestBody final PrepareSessionRequest request) {
@@ -96,9 +164,9 @@ public class ApiController {
                             .build();
                     try {
                         _scriptApi.report_synth(synthRequest);
-                        log.info("[{}]: scriptApi.report_synth: request:{}", request.getSessionId(), synthRequest);
+                        log.info("[{}]: scriptApi.report_synth: synthRequest:{}", request.getSessionId(), synthRequest);
                     } catch (Exception ex1) {
-                        log.warn("[{}]: scriptApi.report_synth: request:{} failed: {}",
+                        log.warn("[{}]: scriptApi.report_synth: synthRequest:{} failed: {}",
                                 request.getSessionId(), synthRequest, ExceptionUtil.exception2detail(ex1));
                     }
                 } else if (ex != null) {
