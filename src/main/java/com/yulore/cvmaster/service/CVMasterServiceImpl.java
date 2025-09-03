@@ -1,6 +1,8 @@
 package com.yulore.cvmaster.service;
 
 import com.yulore.api.CVMasterService;
+import com.yulore.api.CosyVoiceService;
+import com.yulore.api.ZeroShotTask;
 import com.yulore.cvmaster.vo.*;
 import com.yulore.util.ExceptionUtil;
 import io.netty.util.concurrent.DefaultThreadFactory;
@@ -29,9 +31,9 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     public CVMasterServiceImpl(@Value("${service.cosyvoice}") final String serviceName,
                                final RedissonClient redisson) {
         cosyVoiceService = redisson.getRemoteService(serviceName)
-                .get(CosyVoiceServiceAsync.class, RemoteInvocationOptions.defaults()
+                .get(/*CosyVoiceServiceAsync.class*/CosyVoiceService.class, RemoteInvocationOptions.defaults()
                         .noAck()
-                        .expectResultWithin(300 * 1000L));
+                        .expectResultWithin(10 * 1000L));
 
         checkAndExecuteTasks();
     }
@@ -40,6 +42,28 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     public void updateCVAgentStatus(final String agentId, final int freeWorks) {
         log.info("updateCVAgentStatus: agent[{}] - freeWorks: {}", agentId, freeWorks);
         agentMemos.put(agentId, new AgentMemo(agentId, freeWorks, System.currentTimeMillis()));
+    }
+
+    @Override
+    public void feedbackZeroShotStatus(final String agentId, final String task_id, final int status) {
+        log.info("feedbackZeroShotStatus: agent[{}] - task_id: {}: status:{}", agentId, task_id, status);
+        if (status  == -1) {
+            final var memo = zeroShotMemos.get(task_id);
+            if (memo != null) {
+                log.info("task: {} failed, schedule_to_retry", task_id);
+                // set status => 0, to re-try
+                memo.status = 0;
+            }
+        } else if (status == 0) {
+            final var memo = zeroShotMemos.remove(task_id);
+            completedTasks.put(task_id, memo.task);
+            log.info("task: {} complete, cost: {} s", task_id, (System.currentTimeMillis() - memo.beginInMs) / 1000.0f);
+            if (memo.completableFuture != null) {
+                memo.completableFuture.complete(memo.task);
+            }
+        } else if (status == 1) {
+            log.info("task: {} pending", task_id);
+        }
     }
 
     @Override
@@ -133,7 +157,8 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                         if (0 == memo.status) {
                             memo.status = 1; // executing
                             log.info("execute_zeroshot_task: {}", memo.task);
-                            final long now = System.currentTimeMillis();
+                            memo.beginInMs = System.currentTimeMillis();
+                            /*
                             final RFuture<String> future = cosyVoiceService.inferenceZeroShotAndSave(
                                     memo.task.tts_text,
                                     memo.task.prompt_text,
@@ -160,7 +185,9 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                     memo.status = 0;
                                 }
                             });
-                            log.info("async_execute_zeroshot_task: {} ok", memo.task);
+                            */
+                            final var agentId = cosyVoiceService.commitZeroShotTask(memo.task);
+                            log.info("async_execute_zeroshot_task: {} by agent:{} ok", memo.task, agentId);
                             break;
                         }
                     }
@@ -203,7 +230,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         return pendingTasks;
     }
 
-    private final CosyVoiceServiceAsync cosyVoiceService;
+    private final /*CosyVoiceServiceAsync*/ CosyVoiceService cosyVoiceService;
 
     @Builder
     @Data
@@ -211,6 +238,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     static public class ZeroShotMemo {
         private ZeroShotTask task;
         private CompletableFuture<ZeroShotTask> completableFuture;
+        private long beginInMs;
         // 0: todo  1: executing 2: complete 3: failed
         private int status;
         private String resp;

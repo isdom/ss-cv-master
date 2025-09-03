@@ -1,6 +1,7 @@
 package com.yulore.cvmaster.controller;
 
 import com.aliyun.oss.OSS;
+import com.yulore.api.ZeroShotTask;
 import com.yulore.cvmaster.service.CVTaskService;
 import com.yulore.cvmaster.vo.*;
 import com.yulore.util.ExceptionUtil;

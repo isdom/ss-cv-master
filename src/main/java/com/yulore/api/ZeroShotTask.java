@@ -1,4 +1,4 @@
-package com.yulore.cvmaster.vo;
+package com.yulore.api;
 
 import lombok.Builder;
 import lombok.Data;

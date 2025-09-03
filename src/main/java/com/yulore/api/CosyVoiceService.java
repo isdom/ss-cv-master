@@ -6,4 +6,6 @@ public interface CosyVoiceService {
                                     final String promptWav,
                                     final String bucket,
                                     final String saveTo);
+
+    String commitZeroShotTask(final ZeroShotTask task);
 }

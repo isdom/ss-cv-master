@@ -1,9 +1,9 @@
 package com.yulore.cvmaster.service;
 
+import com.yulore.api.ZeroShotTask;
 import com.yulore.cvmaster.vo.*;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 
 public interface CVTaskService {
     void commitZeroShotTask(final ZeroShotTask task, final CompletableFuture<ZeroShotTask> cf);
