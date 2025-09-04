@@ -39,30 +39,50 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public void updateCVAgentStatus(final String agentId, final int freeWorks) {
+    public void updateCVAgentStatus(final String agentId, final int totalWorks, final int freeWorks) {
         log.info("updateCVAgentStatus: agent[{}] - freeWorks: {}", agentId, freeWorks);
-        agentMemos.put(agentId, new AgentMemo(agentId, freeWorks, System.currentTimeMillis()));
+        agentMemos.put(agentId, new AgentMemo(agentId, totalWorks, freeWorks, System.currentTimeMillis()));
     }
 
     @Override
     public void feedbackZeroShotStatus(final String agentId, final String task_id, final int status) {
         log.info("feedbackZeroShotStatus: agent[{}] - task_id: {}: status:{}", agentId, task_id, status);
-        if (status  == -1) {
-            final var memo = zeroShotMemos.get(task_id);
-            if (memo != null) {
-                log.info("task: {} failed, schedule_to_retry", task_id);
-                // set status => 0, to re-try
+        final var memo = zeroShotMemos.get(task_id);
+        if (memo == null) {
+            // memo is null
+            log.warn("task: {} feedback_by_agentId({}) has_no_memo, , ignore feedback_status[{}]", task_id, agentId, status);
+            return;
+        }
+        if (!agentId.equals(memo.agentId)) {
+            // agentId mismatch
+            log.warn("task: {} feedback_by_agentId({}) mismatch commit_by_agentId({}), ignore feedback_status[{}]",
+                    task_id, agentId, memo.agentId, status);
+            return;
+        }
+        switch (status) {
+            case -1: {
+                log.info("task: {} feedback_by_agentId({}) failed, schedule_to_retry", task_id, agentId);
+                // set task's status => 0, to re-try
                 memo.status = 0;
+                memo.agentId = null;
+                memo.lastFeedbackInMs = -1;
             }
-        } else if (status == 0) {
-            final var memo = zeroShotMemos.remove(task_id);
-            completedTasks.put(task_id, memo.task);
-            log.info("task: {} complete, cost: {} s", task_id, (System.currentTimeMillis() - memo.beginInMs) / 1000.0f);
-            if (memo.completableFuture != null) {
-                memo.completableFuture.complete(memo.task);
+            break;
+            case 0: {
+                zeroShotMemos.remove(task_id);
+                completedTasks.put(task_id, memo.task);
+                log.info("task: {} complete, cost: {} s", task_id, (System.currentTimeMillis() - memo.beginInMs) / 1000.0f);
+                if (memo.completableFuture != null) {
+                    memo.completableFuture.complete(memo.task);
+                }
             }
-        } else if (status == 1) {
-            log.info("task: {} pending", task_id);
+            break;
+            case 1: {
+                // task progress
+                memo.lastFeedbackInMs = System.currentTimeMillis();
+                log.info("task: {} progress_for {} s", task_id, (memo.lastFeedbackInMs - memo.beginInMs) / 1000.0f);
+            }
+            break;
         }
     }
 
@@ -73,6 +93,8 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                             .task(task)
                             .status(0)
                             .completableFuture(cf)
+                            .agentId(null)
+                            .lastFeedbackInMs(-1)
                             .build()) ) {
                 log.warn("commitZeroShotTasks: task_id:{} has_committed_already, ignore", task.task_id);
                 if (cf != null) {
@@ -83,7 +105,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
 
     @Override
     public WorkerStatus queryWorkerStatus() {
-        return WorkerStatus.builder().total_workers(agentMemos.size()).free_workers(totalFreeWorks()).build();
+        return WorkerStatus.builder().total_workers(totalWorks()).free_workers(totalFreeWorks()).build();
     }
 
     @Override
@@ -155,9 +177,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                 if (totalFreeWorks() > 0) {
                     for (final ZeroShotMemo memo : zeroShotMemos.values()) {
                         if (0 == memo.status) {
-                            memo.status = 1; // executing
-                            log.info("execute_zeroshot_task: {}", memo.task);
-                            memo.beginInMs = System.currentTimeMillis();
+                            try {
                             /*
                             final RFuture<String> future = cosyVoiceService.inferenceZeroShotAndSave(
                                     memo.task.tts_text,
@@ -186,13 +206,35 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                 }
                             });
                             */
-                            final var agentId = cosyVoiceService.commitZeroShotTask(memo.task);
-                            log.info("async_execute_zeroshot_task: {} by agent:{} ok", memo.task, agentId);
+                                log.info("try commitZeroShotTask: {}", memo.task);
+                                memo.agentId = cosyVoiceService.commitZeroShotTask(memo.task);
+                                memo.status = 1; // progress
+                                memo.beginInMs = System.currentTimeMillis();
+                                memo.lastFeedbackInMs = memo.beginInMs;
+                                log.info("commitZeroShotTask_success: {} by agent:{} ok", memo.task, memo.agentId);
+                            } catch (Exception ex) {
+                                log.warn("commitZeroShotTask_failed: {} with {}", memo.task, ExceptionUtil.exception2detail(ex));
+                            }
                             break;
                         }
                     }
                 } else {
                     //log.debug("no more free workers for pending tasks: {}", pendingTasks);
+                }
+            }
+            final var now = System.currentTimeMillis();
+            for (final ZeroShotMemo memo : zeroShotMemos.values()) {
+                if (1 == memo.status) {
+                    // progress
+                    if (now - memo.lastFeedbackInMs > 60 * 1000L) {
+                        // not feedback more than 60 seconds
+                        log.info("task: {} commit_by_agentId({}) NOT feedback {} s, schedule_to_retry",
+                                memo.task.task_id, memo.agentId, (now - memo.lastFeedbackInMs) / 1000.0f);
+                        // set task's status => 0, to re-try
+                        memo.status = 0;
+                        memo.agentId = null;
+                        memo.lastFeedbackInMs = -1;
+                    }
                 }
             }
         } finally {
@@ -212,6 +254,14 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                 }
             }
         }
+    }
+
+    private int totalWorks() {
+        int totalWorks = 0;
+        for (AgentMemo memo : agentMemos.values()) {
+            totalWorks += memo.totalWorks();
+        }
+        return totalWorks;
     }
 
     private int totalFreeWorks() {
@@ -239,8 +289,13 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         private ZeroShotTask task;
         private CompletableFuture<ZeroShotTask> completableFuture;
         private long beginInMs;
-        // 0: todo  1: executing 2: complete 3: failed
+        //  0: to_start
+        //  1: progress
+        //  2: complete
+        //  3: failed
         private int status;
+        private String agentId;
+        private long lastFeedbackInMs;
         private String resp;
     }
 
