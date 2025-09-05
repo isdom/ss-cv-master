@@ -32,8 +32,10 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                final RedissonClient redisson) {
         cosyVoiceService = redisson.getRemoteService(serviceName)
                 .get(/*CosyVoiceServiceAsync.class*/CosyVoiceService.class, RemoteInvocationOptions.defaults()
-                        .noAck()
-                        .expectResultWithin(10 * 1000L));
+                        .expectAckWithin(1, TimeUnit.SECONDS)
+                        //.noAck()
+                        .noResult());
+                        //.expectResultWithin(10, TimeUnit.SECONDS));
 
         checkAndExecuteTasks();
     }
@@ -53,7 +55,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
             log.warn("task: {} feedback_by_agentId({}) has_no_memo, , ignore feedback_status[{}]", task_id, agentId, status);
             return;
         }
-        if (!agentId.equals(memo.agentId)) {
+        if (memo.agentId != null && !agentId.equals(memo.agentId)) {
             // agentId mismatch
             log.warn("task: {} feedback_by_agentId({}) mismatch commit_by_agentId({}), ignore feedback_status[{}]",
                     task_id, agentId, memo.agentId, status);
@@ -79,6 +81,9 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
             break;
             case 1: {
                 // task progress
+                if (memo.agentId == null) {
+                    memo.agentId = agentId;
+                }
                 memo.lastFeedbackInMs = System.currentTimeMillis();
                 log.info("task: {} progress_for {} s", task_id, (memo.lastFeedbackInMs - memo.beginInMs) / 1000.0f);
             }
@@ -207,11 +212,13 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                             });
                             */
                                 log.info("try commitZeroShotTask: {}", memo.task);
-                                memo.agentId = cosyVoiceService.commitZeroShotTask(memo.task);
+                                final var start = System.currentTimeMillis();
+                                cosyVoiceService.commitZeroShotTask(memo.task);
+                                // memo.agentId =
                                 memo.status = 1; // progress
                                 memo.beginInMs = System.currentTimeMillis();
                                 memo.lastFeedbackInMs = memo.beginInMs;
-                                log.info("commitZeroShotTask_success: {} by agent:{} ok", memo.task, memo.agentId);
+                                log.info("commitZeroShotTask_success: {}, cost: {} s", memo.task, (memo.beginInMs - start) / 1000.0f);
                             } catch (Exception ex) {
                                 log.warn("commitZeroShotTask_failed: {} with {}", memo.task, ExceptionUtil.exception2detail(ex));
                             }

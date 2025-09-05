@@ -7,5 +7,5 @@ public interface CosyVoiceService {
                                     final String bucket,
                                     final String saveTo);
 
-    String commitZeroShotTask(final ZeroShotTask task);
+    void commitZeroShotTask(final ZeroShotTask task);
 }
