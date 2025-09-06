@@ -7,5 +7,6 @@ import lombok.ToString;
 @ToString
 public class TaskSummary {
     public int pending;
+    public int progress;
     public int done;
 }

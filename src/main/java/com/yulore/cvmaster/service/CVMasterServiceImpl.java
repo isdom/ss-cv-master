@@ -10,7 +10,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RFuture;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.RemoteInvocationOptions;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -164,7 +163,11 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
 
     @Override
     public TaskSummary queryTaskSummary() {
-        return TaskSummary.builder().pending(zeroShotMemos.size()).done(completedTasks.size()).build();
+        return TaskSummary.builder()
+                .pending((int) countOfPendingStatus())
+                .progress((int)countOfProgressStatus())
+                .done(completedTasks.size())
+                .build();
     }
 
     @PreDestroy
@@ -319,4 +322,15 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     private final ConcurrentMap<String, ZeroShotTask> completedTasks = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler =
             Executors.newScheduledThreadPool(1, new DefaultThreadFactory("cvTaskExecutor"));
-}
+
+    private long countOfPendingStatus() {
+        return zeroShotMemos.values().stream()
+                .filter(memo -> memo.status == 0)
+                .count();
+    }
+
+    private long countOfProgressStatus() {
+        return zeroShotMemos.values().stream()
+                .filter(memo -> memo.status == 1)
+                .count();
+    }}
