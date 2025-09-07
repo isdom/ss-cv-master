@@ -164,8 +164,8 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     @Override
     public TaskSummary queryTaskSummary() {
         return TaskSummary.builder()
-                .pending((int) countOfPendingStatus())
-                .progress((int)countOfProgressStatus())
+                .pending((int) countOfStatus(0))
+                .progress((int)countOfStatus(1))
                 .done(completedTasks.size())
                 .build();
     }
@@ -323,14 +323,9 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     private final ScheduledExecutorService scheduler =
             Executors.newScheduledThreadPool(1, new DefaultThreadFactory("cvTaskExecutor"));
 
-    private long countOfPendingStatus() {
+    private long countOfStatus(final int status) {
         return zeroShotMemos.values().stream()
-                .filter(memo -> memo.status == 0)
+                .filter(memo -> memo.status == status)
                 .count();
     }
-
-    private long countOfProgressStatus() {
-        return zeroShotMemos.values().stream()
-                .filter(memo -> memo.status == 1)
-                .count();
-    }}
+}
