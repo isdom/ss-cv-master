@@ -133,7 +133,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                 }
             } else {
                 statues.add(TaskStatus.builder().task_id(taskId)
-                        .status("pending")
+                        .status(memo.status == 0 ? "pending" : "progress")
                         .build());
             }
         }
@@ -145,7 +145,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         final List<TaskStatus> statues = new ArrayList<>();
         for (ZeroShotMemo memo : zeroShotMemos.values()) {
             statues.add(TaskStatus.builder().task_id(memo.task.task_id)
-                    .status("pending")
+                    .status(memo.status == 0 ? "pending" : "progress")
                     .build());
         }
         for (ZeroShotTask task : completedTasks.values()) {
