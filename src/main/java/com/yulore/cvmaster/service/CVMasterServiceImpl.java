@@ -301,8 +301,6 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         private long beginInMs;
         //  0: to_start
         //  1: progress
-        //  2: complete
-        //  3: failed
         private int status;
         private String agentId;
         private long lastFeedbackInMs;
