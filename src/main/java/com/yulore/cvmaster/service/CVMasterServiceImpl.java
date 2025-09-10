@@ -32,9 +32,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         cosyVoiceService = redisson.getRemoteService(serviceName)
                 .get(/*CosyVoiceServiceAsync.class*/CosyVoiceService.class, RemoteInvocationOptions.defaults()
                         .expectAckWithin(1, TimeUnit.SECONDS)
-                        //.noAck()
                         .noResult());
-                        //.expectResultWithin(10, TimeUnit.SECONDS));
 
         checkAndExecuteTasks();
     }
