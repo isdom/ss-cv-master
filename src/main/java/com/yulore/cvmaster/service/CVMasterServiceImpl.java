@@ -30,7 +30,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     public CVMasterServiceImpl(@Value("${service.cosyvoice}") final String serviceName,
                                final RedissonClient redisson) {
         cosyVoiceService = redisson.getRemoteService(serviceName)
-                .get(/*CosyVoiceServiceAsync.class*/CosyVoiceService.class, RemoteInvocationOptions.defaults()
+                .get(CosyVoiceService.class, RemoteInvocationOptions.defaults()
                         .expectAckWithin(1, TimeUnit.SECONDS)
                         .noResult());
 
