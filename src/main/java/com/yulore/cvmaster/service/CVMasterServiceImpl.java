@@ -288,7 +288,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
         return pendingTasks;
     }
 
-    private final /*CosyVoiceServiceAsync*/ CosyVoiceService cosyVoiceService;
+    private final CosyVoiceService cosyVoiceService;
 
     @Builder
     @Data
