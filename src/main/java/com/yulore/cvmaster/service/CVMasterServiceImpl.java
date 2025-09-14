@@ -38,9 +38,17 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     }
 
     @Override
-    public void updateCVAgentStatus(final String agentId, final int totalWorks, final int freeWorks) {
+    public void updateCVAgentStatus(final String agentId,
+                                    final int totalWorks,
+                                    final int freeWorks,
+                                    final long timestamp) {
+        final long now = System.currentTimeMillis();
+        if (now - timestamp > AGENT_UPDATE_TIMEOUT_IN_MS) {
+            // out of date update, ignore
+            return;
+        }
         log.info("updateCVAgentStatus: agent[{}] - freeWorks: {}", agentId, freeWorks);
-        agentMemos.put(agentId, new AgentMemo(agentId, totalWorks, freeWorks, System.currentTimeMillis()));
+        agentMemos.put(agentId, new AgentMemo(agentId, totalWorks, freeWorks, now));
     }
 
     @Override
