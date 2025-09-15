@@ -42,7 +42,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
                                     final int totalWorks,
                                     final int freeWorks,
                                     final long timestamp) {
-        final long now = System.currentTimeMillis();
+        final var now = System.currentTimeMillis();
         if (now - timestamp > AGENT_UPDATE_TIMEOUT_IN_MS) {
             // out of date update, ignore
             return;
