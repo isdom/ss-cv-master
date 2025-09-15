@@ -186,7 +186,7 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
     private void checkAndExecuteTasks() {
         updateAgents();
         try {
-            final int pendingTasks = pendingTasks();
+            final var pendingTasks = pendingTasks();
             if (pendingTasks > 0) {
                 if (totalFreeWorks() > 0) {
                     for (final ZeroShotMemo memo : zeroShotMemos.values()) {
