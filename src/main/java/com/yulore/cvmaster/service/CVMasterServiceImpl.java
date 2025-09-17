@@ -20,6 +20,7 @@ import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -78,7 +79,11 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
             case 0: {
                 zeroShotMemos.remove(task_id);
                 completedTasks.put(task_id, memo.task);
-                log.info("task: {} complete, cost: {} s", task_id, (System.currentTimeMillis() - memo.beginInMs) / 1000.0f);
+                final var costInMs = System.currentTimeMillis() - memo.beginInMs;
+                final var totalCostInMs = totalTaskCostInMs.addAndGet(costInMs);
+                final var totalTextLen = totalTaskTextLen.addAndGet(memo.task.tts_text.length());
+                log.info("task: {} complete, cost: {} s, avg_task_complete_speed: {} ch/s",
+                        task_id, costInMs / 1000.0f, totalTextLen / (totalCostInMs / 1000.0f));
                 if (memo.completableFuture != null) {
                     memo.completableFuture.complete(memo.task);
                 }
@@ -321,6 +326,8 @@ public class CVMasterServiceImpl implements CVMasterService, CVTaskService {
 
     private long last_agent_check_timestamp = 0;
 
+    private final AtomicLong totalTaskCostInMs = new AtomicLong(0);
+    private final AtomicLong totalTaskTextLen = new AtomicLong(0);
     private final ConcurrentMap<String, AgentMemo> agentMemos = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ZeroShotMemo> zeroShotMemos = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ZeroShotTask> completedTasks = new ConcurrentHashMap<>();
